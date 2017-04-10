@@ -85,7 +85,24 @@ public class BaseStationController implements Runnable {
                 output = "DISCONNETED";
                 break;
             case "OPEN_BASE":
-                output = (validateLogin(messageParameters[1], messageParameters[2])) ? "LOGIN_VALIDATED" : "LOGIN_FAILED";
+                if (validateLogin(messageParameters[1], messageParameters[2])) {
+                    output = "LOGIN_VALIDATED";
+                    try {
+                        new Thread(new BaseStationModel(
+                                messageParameters[3], //sensor
+                                messageParameters[1], //location
+                                messageParameters[4], //unit
+                                Float.parseFloat(messageParameters[5]), //min
+                                Float.parseFloat(messageParameters[6]), //max
+                                Integer.parseInt(messageParameters[7]), //interval
+                                "localhost", 9001)
+                        ).start();
+                    } catch (IOException ex) {
+                        output = ex.getMessage();
+                    }
+                } else {
+                    output = "LOGIN_FAILED";
+                }
                 break;
             case "OPEN_BASE_CONSOLE":
                 output = "BASE_CONSOLE_OPENED";
@@ -108,6 +125,9 @@ public class BaseStationController implements Runnable {
                 } else {
                     output = "BASE_CREATION_FAILED: INVALID_SERVER_KEY";
                 }
+                break;
+            case "READING":
+                output = "READING_ACK_" + messageParameters[3];
                 break;
             default:
                 output = "ACK: " + messageParameters[0];
