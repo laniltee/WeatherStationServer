@@ -96,7 +96,8 @@ public class BaseStationController implements Runnable {
                                 Float.parseFloat(messageParameters[6]), //max
                                 Integer.parseInt(messageParameters[7]), //interval
                                 "localhost", 9001)
-                        ).start();
+                        ).start();           
+                        
                     } catch (IOException ex) {
                         output = ex.getMessage();
                     }
