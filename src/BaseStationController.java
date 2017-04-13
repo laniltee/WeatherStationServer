@@ -5,20 +5,16 @@
  */
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
@@ -31,14 +27,17 @@ public class BaseStationController implements Runnable {
     private Socket sensorSocket;
     private PrintWriter out;
     private BufferedReader in;
-    private String baseStationsString = "Kandy,Peradeniya,Watawala,Hikkaduwa,Kurunegala";
+    private String baseStationsString = "";
     private String passwordString = "";
     private final String SERVER_KEY = "123";
-    private JSONParser jsonParser;
-    private String baseStationsFilePath = System.getProperty("user.dir") + "\\src\\BaseStationsList.json";
+    private String storagePath = System.getProperty("user.dir") + "\\src\\Storage\\";
+
+    static volatile ConcurrentHashMap<String, CopyOnWriteArrayList<String>> openedStations = new ConcurrentHashMap<>();
+    HashMap<String, String> passwords = new HashMap<>();
+
+    static volatile ConcurrentHashMap<String, Float> currentReading = new ConcurrentHashMap<>();
 
     public BaseStationController(Socket sensorSocket) {
-        jsonParser = new JSONParser();
         this.sensorSocket = sensorSocket;
         try {
             out = new PrintWriter(sensorSocket.getOutputStream(), true);
@@ -85,7 +84,29 @@ public class BaseStationController implements Runnable {
                 output = "DISCONNETED";
                 break;
             case "OPEN_BASE":
-                output = (validateLogin(messageParameters[1], messageParameters[2])) ? "LOGIN_VALIDATED" : "LOGIN_FAILED";
+                if (validateLogin(messageParameters[1], messageParameters[2])) {
+                    try {
+                        if (isSensorOpened(messageParameters[1], messageParameters[3])) {
+                            output = "SENSOR_ALREADY_RUNNING";
+                        } else {
+                            new Thread(new BaseStationModel(
+                                    messageParameters[3], //sensor
+                                    messageParameters[1], //location
+                                    messageParameters[4], //unit
+                                    Float.parseFloat(messageParameters[5]), //min
+                                    Float.parseFloat(messageParameters[6]), //max
+                                    Integer.parseInt(messageParameters[7]), //interval
+                                    "localhost", 9001)
+                            ).start();
+                            openedStations.get(messageParameters[1]).add(messageParameters[3]);
+                            output = "LOGIN_VALIDATED";
+                        }
+                    } catch (IOException ex) {
+                        output = ex.getMessage();
+                    }
+                } else {
+                    output = "LOGIN_FAILED";
+                }
                 break;
             case "OPEN_BASE_CONSOLE":
                 output = "BASE_CONSOLE_OPENED";
@@ -100,7 +121,7 @@ public class BaseStationController implements Runnable {
             case "NEW_BASE":
                 if (validateServerKey(messageParameters[2])) {
                     try {
-                        addBaseStation(messageParameters[1], messageParameters[3]);
+                        addBaseStation(messageParameters[1], "", messageParameters[3]);
                         output = "NEW_BASE_CREATED";
                     } catch (IOException | ParseException ex) {
                         output = ex.getMessage();
@@ -108,6 +129,18 @@ public class BaseStationController implements Runnable {
                 } else {
                     output = "BASE_CREATION_FAILED: INVALID_SERVER_KEY";
                 }
+                break;
+            case "READING":
+                updateCurrentReading(messageParameters[1], messageParameters[2], Float.parseFloat(messageParameters[4]));
+                if (isWarning(messageParameters[2], Float.parseFloat(messageParameters[4]))) {
+                    output = "READING_WARNING_" + messageParameters[3];
+                } else {
+                    output = "READING_ACK_" + messageParameters[3];
+                }
+                break;
+            case "BASE_STATION_CLOSE":
+                removeSensor(messageParameters[1], messageParameters[2]);
+                output = "SENSOR_CLOSED&" + messageParameters[1] + "&" + messageParameters[2];
                 break;
             default:
                 output = "ACK: " + messageParameters[0];
@@ -130,25 +163,31 @@ public class BaseStationController implements Runnable {
     final void loadBaseStations() throws FileNotFoundException, IOException, ParseException {
         baseStationsString = "";
         passwordString = "";
-        Object baseStationsFile = jsonParser.parse(new FileReader(System.getProperty("user.dir") + "\\src\\BaseStationsList.json"));
-        JSONArray baseStationsArray = (JSONArray) baseStationsFile;
-        Iterator stationsIterator = baseStationsArray.iterator();
-        while (stationsIterator.hasNext()) {
-            JSONObject baseStation = (JSONObject) stationsIterator.next();
-            baseStationsString += baseStation.get("location") + ",";
-            passwordString += baseStation.get("password") + ",";
+        String baseStation;
+
+        FileReader stationsFile = new FileReader(storagePath + "\\BaseStationsList.txt");
+        BufferedReader stationsFileReader = new BufferedReader(stationsFile);
+
+        while ((baseStation = stationsFileReader.readLine()) != null) {
+            String location = baseStation.split(":")[0];
+            baseStationsString += location + ",";
+            passwordString += baseStation.split(":")[1] + ",";
+//            openedStations.put(location, fillerList);
+            getList(location);
         }
     }
 
     String loadStationSensors(String baseStation) throws FileNotFoundException, IOException, ParseException {
         String sensorsString = "";
-        Object sensorsFile = jsonParser.parse(new FileReader(System.getProperty("user.dir") + "\\src\\Sensors_" + baseStation + ".json"));
-        JSONArray sensorsArray = (JSONArray) sensorsFile;
-        Iterator sensorsIterator = sensorsArray.iterator();
-        while (sensorsIterator.hasNext()) {
-            String sensor = sensorsIterator.next().toString();
+        String sensor;
+
+        FileReader sensorsFile = new FileReader(storagePath + "\\Sensors_" + baseStation + ".txt");
+        BufferedReader sensorsFileReader = new BufferedReader(sensorsFile);
+
+        while ((sensor = sensorsFileReader.readLine()) != null) {
             sensorsString += sensor + ",";
         }
+
         return sensorsString;
     }
 
@@ -156,17 +195,61 @@ public class BaseStationController implements Runnable {
         return SERVER_KEY.matches(input);
     }
 
-    void addBaseStation(String location, String password) throws FileNotFoundException, IOException, ParseException {
-        JSONObject baseStation = new JSONObject();
-        baseStation.put("location", location);
-        baseStation.put("password", password);
+    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException, ParseException {
 
-        Object baseStationsFile = jsonParser.parse(new FileReader(baseStationsFilePath));
-        JSONArray baseStationsArray = (JSONArray) baseStationsFile;
-        baseStationsArray.add(baseStation);
+    }
 
-        FileWriter fileWriter = new FileWriter(baseStationsFilePath);
-        fileWriter.write(baseStationsArray.toJSONString());
-        fileWriter.flush();
+    synchronized boolean isSensorOpened(String location, String sensor) {
+        return getList(location).contains(sensor);
+    }
+
+    synchronized void removeSensor(String location, String sensor) {
+//        ArrayList<String> sensors = openedStations.get(location);
+//        for (int i = 0; i < sensors.size(); i++) {
+//            if (sensors.get(i).equals(sensor)) {
+//                sensors.remove(i);
+//                openedStations.replace(location, sensors);
+//                break;
+//            }
+//        }
+        getList(location).remove(sensor);
+    }
+
+    synchronized void addSensor(String location, String sensor) {
+//        ArrayList<String> sensors = openedStations.get(location);
+//        sensors.add(sensor);
+//        openedStations.replace(location, sensors);
+        getList(location).add(sensor);
+    }
+
+    CopyOnWriteArrayList<String> getList(String key) {
+        if (!openedStations.containsKey(key)) {
+            openedStations.putIfAbsent(key, new CopyOnWriteArrayList<>());
+        }
+        return openedStations.get(key);
+    }
+
+    synchronized void updateCurrentReading(String location, String sensor, float reading) {
+        String mapKey = location + "_" + sensor;
+        if (currentReading.containsKey(mapKey)) {
+            currentReading.replace(mapKey, reading);
+        } else {
+            currentReading.putIfAbsent(mapKey, reading);
+        }
+    }
+
+    public static float getCurrentReading(String location, String sensor) {
+        String mapKey = location + "_" + sensor;
+        return currentReading.get(mapKey);
+    }
+
+    boolean isWarning(String sensor, Float reading) {
+        if (sensor.equals("Rainfall") && Float.compare(reading, 20.0F) > 0) {
+            return true;
+        }
+        if (sensor.equals("Temparature") && ((Float.compare(reading, 35.0F) > 0) || (Float.compare(reading, 20.0F)) < 0)) {
+            return true;
+        }
+        return false;
     }
 }

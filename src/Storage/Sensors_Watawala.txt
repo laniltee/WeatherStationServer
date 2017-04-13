@@ -1,0 +1,4 @@
+Temparature
+Humidity
+Air Pressure
+Rainfall
