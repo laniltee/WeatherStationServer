@@ -91,6 +91,7 @@ public class BaseStationModel implements Runnable {
         frame.setVisible(true);
         lblLocation.setText("Location: " + location);
         lblSensor.setText("Sensor: " + sensor);
+        frame.setTitle(controllerSocket.getLocalSocketAddress().toString());
 
         btnStop.addActionListener((ActionEvent e) -> {
             lblReading.setText(lblReading.getText() + " [STOPPED]");

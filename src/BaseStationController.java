@@ -30,15 +30,14 @@ public class BaseStationController implements Runnable {
     private String baseStationsString = "";
     private String passwordString = "";
     private final String SERVER_KEY = "123";
-    private JSONParser jsonParser;
-    private String baseStationsFilePath = System.getProperty("user.dir") + "\\src\\BaseStationsList.json";
     private String storagePath = System.getProperty("user.dir") + "\\src\\Storage\\";
 
     static volatile ConcurrentHashMap<String, CopyOnWriteArrayList<String>> openedStations = new ConcurrentHashMap<>();
     HashMap<String, String> passwords = new HashMap<>();
 
+    static volatile ConcurrentHashMap<String, Float> currentReading = new ConcurrentHashMap<>();
+
     public BaseStationController(Socket sensorSocket) {
-        jsonParser = new JSONParser();
         this.sensorSocket = sensorSocket;
         try {
             out = new PrintWriter(sensorSocket.getOutputStream(), true);
@@ -122,7 +121,7 @@ public class BaseStationController implements Runnable {
             case "NEW_BASE":
                 if (validateServerKey(messageParameters[2])) {
                     try {
-                        addBaseStation(messageParameters[1], messageParameters[3]);
+                        addBaseStation(messageParameters[1], "", messageParameters[3]);
                         output = "NEW_BASE_CREATED";
                     } catch (IOException | ParseException ex) {
                         output = ex.getMessage();
@@ -132,7 +131,12 @@ public class BaseStationController implements Runnable {
                 }
                 break;
             case "READING":
-                output = "READING_ACK_" + messageParameters[3];
+                updateCurrentReading(messageParameters[1], messageParameters[2], Float.parseFloat(messageParameters[4]));
+                if (isWarning(messageParameters[2], Float.parseFloat(messageParameters[4]))) {
+                    output = "READING_WARNING_" + messageParameters[3];
+                } else {
+                    output = "READING_ACK_" + messageParameters[3];
+                }
                 break;
             case "BASE_STATION_CLOSE":
                 removeSensor(messageParameters[1], messageParameters[2]);
@@ -168,7 +172,6 @@ public class BaseStationController implements Runnable {
             String location = baseStation.split(":")[0];
             baseStationsString += location + ",";
             passwordString += baseStation.split(":")[1] + ",";
-            ArrayList<String> fillerList = new ArrayList<>();
 //            openedStations.put(location, fillerList);
             getList(location);
         }
@@ -192,7 +195,7 @@ public class BaseStationController implements Runnable {
         return SERVER_KEY.matches(input);
     }
 
-    void addBaseStation(String location, String password) throws FileNotFoundException, IOException, ParseException {
+    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException, ParseException {
 
     }
 
@@ -218,11 +221,35 @@ public class BaseStationController implements Runnable {
 //        openedStations.replace(location, sensors);
         getList(location).add(sensor);
     }
-    
-    CopyOnWriteArrayList<String> getList(String key){
-        if(!openedStations.containsKey(key)){
+
+    CopyOnWriteArrayList<String> getList(String key) {
+        if (!openedStations.containsKey(key)) {
             openedStations.putIfAbsent(key, new CopyOnWriteArrayList<>());
         }
         return openedStations.get(key);
+    }
+
+    synchronized void updateCurrentReading(String location, String sensor, float reading) {
+        String mapKey = location + "_" + sensor;
+        if (currentReading.containsKey(mapKey)) {
+            currentReading.replace(mapKey, reading);
+        } else {
+            currentReading.putIfAbsent(mapKey, reading);
+        }
+    }
+
+    public static float getCurrentReading(String location, String sensor) {
+        String mapKey = location + "_" + sensor;
+        return currentReading.get(mapKey);
+    }
+
+    boolean isWarning(String sensor, Float reading) {
+        if (sensor.equals("Rainfall") && Float.compare(reading, 20.0F) > 0) {
+            return true;
+        }
+        if (sensor.equals("Temparature") && ((Float.compare(reading, 35.0F) > 0) || (Float.compare(reading, 20.0F)) < 0)) {
+            return true;
+        }
+        return false;
     }
 }
