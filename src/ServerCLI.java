@@ -1,5 +1,10 @@
 
 import java.net.*;
+import java.rmi.RemoteException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.rmi.*;
+import java.rmi.server.*;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -13,7 +18,17 @@ import java.net.*;
 public class ServerCLI {
 
     public static void main(String[] args) {
-        final String SERVER_KEY = "server123";
+        
+//        try {
+//            Weatherable interfaceSkeleton = new ServerInterface();
+//            Naming.rebind("rmi://localhost/weatherservice", interfaceSkeleton);
+//            System.out.println("Weather Service UP !");
+//        } catch (RemoteException ex) {
+//            System.err.println(ex.getMessage());
+//        } catch (MalformedURLException ex) {
+//           System.err.println(ex.getMessage());
+//        }
+        
         final int SERVER_PORT = 9001;
       
         try {

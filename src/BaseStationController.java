@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
@@ -30,7 +32,10 @@ public class BaseStationController implements Runnable {
     private String baseStationsString = "";
     private String passwordString = "";
     private final String SERVER_KEY = "123";
+
     private String storagePath = System.getProperty("user.dir") + "\\src\\Storage\\";
+    private PrintWriter logWriter;
+    static volatile ConcurrentHashMap<String, PrintWriter> logWriters = new ConcurrentHashMap<>();
 
     static volatile ConcurrentHashMap<String, CopyOnWriteArrayList<String>> openedStations = new ConcurrentHashMap<>();
     HashMap<String, String> passwords = new HashMap<>();
@@ -85,24 +90,26 @@ public class BaseStationController implements Runnable {
                 break;
             case "OPEN_BASE":
                 if (validateLogin(messageParameters[1], messageParameters[2])) {
-                    try {
-                        if (isSensorOpened(messageParameters[1], messageParameters[3])) {
-                            output = "SENSOR_ALREADY_RUNNING";
-                        } else {
-                            new Thread(new BaseStationModel(
-                                    messageParameters[3], //sensor
-                                    messageParameters[1], //location
-                                    messageParameters[4], //unit
-                                    Float.parseFloat(messageParameters[5]), //min
-                                    Float.parseFloat(messageParameters[6]), //max
-                                    Integer.parseInt(messageParameters[7]), //interval
-                                    "localhost", 9001)
-                            ).start();
-                            openedStations.get(messageParameters[1]).add(messageParameters[3]);
-                            output = "LOGIN_VALIDATED";
+                    if (isSensorOpened(messageParameters[1], messageParameters[3])) {
+                        output = "SENSOR_ALREADY_RUNNING";
+                    } else {
+                        String baseStationKey = messageParameters[1] + "_" + messageParameters[3];
+                        try {
+                            logWriters.putIfAbsent(baseStationKey, new PrintWriter(storagePath + "Readings_" + baseStationKey + ".txt"));
+                        } catch (FileNotFoundException ex) {
+                            System.err.println(ex.getMessage());
                         }
-                    } catch (IOException ex) {
-                        output = ex.getMessage();
+//                            new Thread(new BaseStationModel(
+//                                    messageParameters[3], //sensor
+//                                    messageParameters[1], //location
+//                                    messageParameters[4], //unit
+//                                    Float.parseFloat(messageParameters[5]), //min
+//                                    Float.parseFloat(messageParameters[6]), //max
+//                                    Integer.parseInt(messageParameters[7]), //interval
+//                                    "localhost", 9001)
+//                            ).start();
+                        openedStations.get(messageParameters[1]).add(messageParameters[3]);
+                        output = "LOGIN_VALIDATED";
                     }
                 } else {
                     output = "LOGIN_FAILED";
@@ -132,6 +139,13 @@ public class BaseStationController implements Runnable {
                 break;
             case "READING":
                 updateCurrentReading(messageParameters[1], messageParameters[2], Float.parseFloat(messageParameters[4]));
+                 {
+                    try {
+                        writeLog(messageParameters[1], messageParameters[2], messageParameters[3], Float.parseFloat(messageParameters[4]));
+                    } catch (FileNotFoundException ex) {
+                        System.err.println(ex.getMessage());
+                    }
+                }
                 if (isWarning(messageParameters[2], Float.parseFloat(messageParameters[4]))) {
                     output = "READING_WARNING_" + messageParameters[3];
                 } else {
@@ -139,7 +153,9 @@ public class BaseStationController implements Runnable {
                 }
                 break;
             case "BASE_STATION_CLOSE":
+                String baseStationKey = messageParameters[1] + "_" + messageParameters[2];
                 removeSensor(messageParameters[1], messageParameters[2]);
+                logWriters.get(baseStationKey).close();
                 output = "SENSOR_CLOSED&" + messageParameters[1] + "&" + messageParameters[2];
                 break;
             default:
@@ -251,5 +267,10 @@ public class BaseStationController implements Runnable {
             return true;
         }
         return false;
+    }
+
+    void writeLog(String location, String sensor, String time, float value) throws FileNotFoundException {
+        String baseStationKey = location + "_" + sensor;
+        logWriters.get(baseStationKey).println(time + " " + String.valueOf(value));
     }
 }
