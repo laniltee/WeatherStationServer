@@ -11,14 +11,9 @@ import java.net.*;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 /**
  *
@@ -49,7 +44,7 @@ public class BaseStationController implements Runnable {
             in = new BufferedReader(new InputStreamReader(sensorSocket.getInputStream()));
             loadBaseStations();
             System.out.println("Conncetion Succesful With " + sensorSocket.getInetAddress());
-        } catch (IOException | ParseException ex) {
+        } catch (IOException ex) {
             System.err.println(ex.getMessage());
         }
 
@@ -121,7 +116,7 @@ public class BaseStationController implements Runnable {
             case "GET_SENSORS":
                 try {
                     output = loadStationSensors(messageParameters[1]);
-                } catch (IOException | ParseException e) {
+                } catch (IOException e) {
                     output = e.getMessage();
                 }
                 break;
@@ -130,7 +125,7 @@ public class BaseStationController implements Runnable {
                     try {
                         addBaseStation(messageParameters[1], "", messageParameters[3]);
                         output = "NEW_BASE_CREATED";
-                    } catch (IOException | ParseException ex) {
+                    } catch (IOException ex) {
                         output = ex.getMessage();
                     }
                 } else {
@@ -176,7 +171,7 @@ public class BaseStationController implements Runnable {
         return false;
     }
 
-    final void loadBaseStations() throws FileNotFoundException, IOException, ParseException {
+    final void loadBaseStations() throws FileNotFoundException, IOException{
         baseStationsString = "";
         passwordString = "";
         String baseStation;
@@ -191,9 +186,11 @@ public class BaseStationController implements Runnable {
 //            openedStations.put(location, fillerList);
             getList(location);
         }
+        System.out.println("BASE STRING " + baseStationsString);
+        System.out.println("PASS STRING " + passwordString);
     }
 
-    String loadStationSensors(String baseStation) throws FileNotFoundException, IOException, ParseException {
+    String loadStationSensors(String baseStation) throws FileNotFoundException, IOException {
         String sensorsString = "";
         String sensor;
 
@@ -211,7 +208,7 @@ public class BaseStationController implements Runnable {
         return SERVER_KEY.matches(input);
     }
 
-    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException, ParseException {
+    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException{
 
     }
 
