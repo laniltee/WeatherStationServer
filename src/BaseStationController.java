@@ -28,7 +28,7 @@ public class BaseStationController implements Runnable {
     private String passwordString = "";
     private final String SERVER_KEY = "123";
 
-    private String storagePath = System.getProperty("user.dir") + "\\src\\Storage\\";
+    private String storagePath = System.getProperty("user.dir") + "\\Storage\\";
     private PrintWriter logWriter;
     static volatile ConcurrentHashMap<String, PrintWriter> logWriters = new ConcurrentHashMap<>();
 
@@ -171,7 +171,7 @@ public class BaseStationController implements Runnable {
         return false;
     }
 
-    final void loadBaseStations() throws FileNotFoundException, IOException{
+    synchronized final void loadBaseStations() throws FileNotFoundException, IOException{
         baseStationsString = "";
         passwordString = "";
         String baseStation;
@@ -186,6 +186,8 @@ public class BaseStationController implements Runnable {
 //            openedStations.put(location, fillerList);
             getList(location);
         }
+        stationsFile.close();
+        stationsFileReader.close();
         System.out.println("BASE STRING " + baseStationsString);
         System.out.println("PASS STRING " + passwordString);
     }
@@ -253,7 +255,10 @@ public class BaseStationController implements Runnable {
 
     public static float getCurrentReading(String location, String sensor) {
         String mapKey = location + "_" + sensor;
-        return currentReading.get(mapKey);
+        if (currentReading.containsKey(mapKey) && currentReading.get(mapKey) != null) {
+            return currentReading.get(mapKey);
+        }
+        return -99.0F;
     }
 
     boolean isWarning(String sensor, Float reading) {
