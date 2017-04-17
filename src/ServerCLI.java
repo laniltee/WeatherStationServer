@@ -14,14 +14,17 @@ import java.rmi.*;
  * @author Lanil Marasinghe
  */
 public class ServerCLI {
+    
+    
 
     public static void main(String[] args) {
         
 
         try {
-            Weatherable interfaceSkeleton = new ServerInterface();
+            Weatherable interfaceSkeleton = ServerInterface.getObject();
             Naming.rebind("rmi://localhost/weatherservice", interfaceSkeleton);
             System.out.println("Weather Service Rebinded On localhost:1099 !");
+          
         } catch (RemoteException ex) {
             System.err.println(ex.getMessage());
         } catch (MalformedURLException ex) {
@@ -36,6 +39,7 @@ public class ServerCLI {
             while (true) {
                 Socket baseStationSocket = serverSocket.accept();
                 new Thread(new BaseStationController(baseStationSocket)).start();
+   
             }
         } catch (IOException ex) {
             System.err.println(ex.getMessage());

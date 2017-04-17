@@ -11,7 +11,12 @@ import java.net.*;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -26,7 +31,7 @@ public class BaseStationController implements Runnable {
     private BufferedReader in;
     private String baseStationsString = "";
     private String passwordString = "";
-    private final String SERVER_KEY = "123";
+    private static final String SERVER_KEY = "123";
 
     private String storagePath = System.getProperty("user.dir") + "\\Storage\\";
     private PrintWriter logWriter;
@@ -36,6 +41,8 @@ public class BaseStationController implements Runnable {
     HashMap<String, String> passwords = new HashMap<>();
 
     static volatile ConcurrentHashMap<String, Float> currentReading = new ConcurrentHashMap<>();
+    static volatile ConcurrentHashMap<String, String> lastTimeStamp = new ConcurrentHashMap<>();
+    static List<String> allStations;
 
     public BaseStationController(Socket sensorSocket) {
         this.sensorSocket = sensorSocket;
@@ -134,6 +141,7 @@ public class BaseStationController implements Runnable {
                 break;
             case "READING":
                 updateCurrentReading(messageParameters[1], messageParameters[2], Float.parseFloat(messageParameters[4]));
+                updateReadingTime(messageParameters[1], messageParameters[2], messageParameters[3]);
                  {
                     try {
                         writeLog(messageParameters[1], messageParameters[2], messageParameters[3], Float.parseFloat(messageParameters[4]));
@@ -171,7 +179,7 @@ public class BaseStationController implements Runnable {
         return false;
     }
 
-    synchronized final void loadBaseStations() throws FileNotFoundException, IOException{
+    synchronized final void loadBaseStations() throws FileNotFoundException, IOException {
         baseStationsString = "";
         passwordString = "";
         String baseStation;
@@ -206,11 +214,11 @@ public class BaseStationController implements Runnable {
         return sensorsString;
     }
 
-    boolean validateServerKey(String input) {
+    public static boolean validateServerKey(String input) {
         return SERVER_KEY.matches(input);
     }
 
-    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException{
+    synchronized void addBaseStation(String location, String sensor, String password) throws FileNotFoundException, IOException {
 
     }
 
@@ -252,6 +260,15 @@ public class BaseStationController implements Runnable {
             currentReading.putIfAbsent(mapKey, reading);
         }
     }
+    
+    synchronized void updateReadingTime(String location, String sensor, String timestamp) {
+        String mapKey = location + "_" + sensor;
+        if (lastTimeStamp.containsKey(mapKey)) {
+            lastTimeStamp.replace(mapKey, timestamp);
+        } else {
+            lastTimeStamp.putIfAbsent(mapKey, timestamp);
+        }
+    }
 
     public static float getCurrentReading(String location, String sensor) {
         String mapKey = location + "_" + sensor;
@@ -259,6 +276,14 @@ public class BaseStationController implements Runnable {
             return currentReading.get(mapKey);
         }
         return -99.0F;
+    }
+    
+    public static String getTimeStamp(String location, String sensor){
+        String mapKey = location + "_" + sensor;
+        if (lastTimeStamp.containsKey(mapKey) && lastTimeStamp.get(mapKey) != null) {
+            return lastTimeStamp.get(mapKey);
+        }
+        return "NOT_RUNNING";
     }
 
     boolean isWarning(String sensor, Float reading) {
@@ -274,5 +299,34 @@ public class BaseStationController implements Runnable {
     void writeLog(String location, String sensor, String time, float value) throws FileNotFoundException {
         String baseStationKey = location + "_" + sensor;
         logWriters.get(baseStationKey).println(time + " " + String.valueOf(value));
+    }
+
+    public static int getActiveLocationsCount() {
+        int count = 0;
+        Iterator locationIterator = openedStations.entrySet().iterator();
+        while (locationIterator.hasNext()) {
+            Entry temp = (Map.Entry) locationIterator.next();
+            CopyOnWriteArrayList tempList = (CopyOnWriteArrayList) temp.getValue();
+            if (tempList.size() > 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public static int getActiveSensorsCount() {
+        int count = 0;
+        Iterator locationIterator = openedStations.entrySet().iterator();
+        while (locationIterator.hasNext()) {
+            Entry temp = (Map.Entry) locationIterator.next();
+            CopyOnWriteArrayList tempList = (CopyOnWriteArrayList) temp.getValue();
+            count = count + tempList.size();
+        }
+        return count;
+    }
+
+    public static List getAllLocations() {
+        allStations = new ArrayList<>(openedStations.keySet());
+        return allStations;
     }
 }
