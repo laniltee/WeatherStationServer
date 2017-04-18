@@ -2,7 +2,10 @@
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -22,9 +25,9 @@ public class ServerInterface extends UnicastRemoteObject implements Weatherable 
         super();
         monitors = new ArrayList<>();
     }
-    
-    synchronized public static ServerInterface getObject() throws RemoteException{
-        if(singleInstance == null){
+
+    synchronized public static ServerInterface getObject() throws RemoteException {
+        if (singleInstance == null) {
             singleInstance = new ServerInterface();
         }
         return singleInstance;
@@ -71,13 +74,33 @@ public class ServerInterface extends UnicastRemoteObject implements Weatherable 
     }
 
     @Override
-    public void notifyMonitors(String location, String sensor, String timestamp, float reading) {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public void notifyMonitors(String location, String sensor, String timestamp, float reading) throws RemoteException {
+//        for (Monitorable m : monitors) {
+//            try {
+//                m.monitorWarning(location, sensor, timestamp, reading);
+//            } catch (RemoteException ex) {
+//                Logger.getLogger(ServerInterface.class.getName()).log(Level.SEVERE, null, ex);
+//            }
+//        }
+        Iterator monitorIterator = monitors.iterator();
+        while (monitorIterator.hasNext()) {
+            Monitorable m = (Monitorable) monitorIterator.next();
+            try {
+                m.monitorWarning(location, sensor, timestamp, reading);
+            } catch (RemoteException ex) {
+                Logger.getLogger(ServerInterface.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
     }
 
     @Override
-    public void sendReadings() {
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    public void sendReadings() throws RemoteException {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public int getMonitorsCount() throws RemoteException {
+        return monitors.size();
     }
 
 }

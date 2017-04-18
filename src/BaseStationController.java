@@ -11,6 +11,7 @@ import java.net.*;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -19,6 +20,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -111,6 +114,11 @@ public class BaseStationController implements Runnable {
 //                                    "localhost", 9001)
 //                            ).start();
                         openedStations.get(messageParameters[1]).add(messageParameters[3]);
+                        try {
+                            ServerInterface.getObject().notifyMonitors("_", messageParameters[1], messageParameters[3], 201.0F);
+                        } catch (RemoteException ex) {
+                            System.err.println(ex.getMessage());
+                        }
                         output = "LOGIN_VALIDATED";
                     }
                 } else {
@@ -151,6 +159,11 @@ public class BaseStationController implements Runnable {
                 }
                 if (isWarning(messageParameters[2], Float.parseFloat(messageParameters[4]))) {
                     output = "READING_WARNING_" + messageParameters[3];
+                    try {
+                        ServerInterface.getObject().notifyMonitors(messageParameters[3], messageParameters[1], messageParameters[2], Float.parseFloat(messageParameters[4]));
+                    } catch (RemoteException ex) {
+                        System.err.println(ex.getMessage());
+                    }
                 } else {
                     output = "READING_ACK_" + messageParameters[3];
                 }
@@ -160,6 +173,11 @@ public class BaseStationController implements Runnable {
                 removeSensor(messageParameters[1], messageParameters[2]);
                 logWriters.get(baseStationKey).close();
                 output = "SENSOR_CLOSED&" + messageParameters[1] + "&" + messageParameters[2];
+                try {
+                    ServerInterface.getObject().notifyMonitors("_", messageParameters[1], messageParameters[2], 404.0F);
+                } catch (RemoteException ex) {
+                    System.err.println(ex.getMessage());
+                }
                 break;
             default:
                 output = "ACK: " + messageParameters[0];
@@ -260,7 +278,7 @@ public class BaseStationController implements Runnable {
             currentReading.putIfAbsent(mapKey, reading);
         }
     }
-    
+
     synchronized void updateReadingTime(String location, String sensor, String timestamp) {
         String mapKey = location + "_" + sensor;
         if (lastTimeStamp.containsKey(mapKey)) {
@@ -277,8 +295,8 @@ public class BaseStationController implements Runnable {
         }
         return -99.0F;
     }
-    
-    public static String getTimeStamp(String location, String sensor){
+
+    public static String getTimeStamp(String location, String sensor) {
         String mapKey = location + "_" + sensor;
         if (lastTimeStamp.containsKey(mapKey) && lastTimeStamp.get(mapKey) != null) {
             return lastTimeStamp.get(mapKey);

@@ -13,5 +13,5 @@ import java.rmi.RemoteException;
  * @author VMARALA
  */
 public interface Monitorable extends Remote{
-    public void monitorWarning() throws RemoteException;
+    public void monitorWarning(String location, String sensor, String timestamp, float reading) throws RemoteException;
 }

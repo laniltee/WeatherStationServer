@@ -29,8 +29,10 @@ public interface Weatherable extends Remote {
     
     public void removeClient(Monitorable m) throws RemoteException;
     
-    public void notifyMonitors(String location, String sensor, String timestamp, float reading);
+    public void notifyMonitors(String location, String sensor, String timestamp, float reading) throws RemoteException;
     
-    public void sendReadings();
+    public void sendReadings() throws RemoteException;
+    
+    public int getMonitorsCount() throws RemoteException;
 
 }
